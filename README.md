@@ -14,7 +14,7 @@ The team's challenge is to support a progressive transformation toward the cloud
 |---|---|
 | Problem | Digital Café Luna's digital channel currently runs as a monolithic application on traditional infrastructure. Deployments are manual, monitoring is limited, and there is poor visibility into security and costs. |
 | Objective | Support a progressive transformation of the digital channel toward the cloud that improves the ability to deploy changes, monitor the service, manage security, and provide cost visibility. |
-| Initial scope | Thoroughly understand the current problem, refine functional and non-functional requirements, build the initial backlog, and register architectural hypotheses subject to review in later milestones. |
+| Initial scope | T A full enterprise-grade implementation, real payment processing, multi-cloud deployment, multi-region high availability, or building a complex application from scratch are not required at this stage. |
 | Out of scope | The final architecture, the definitive selection of cloud services, the migration implementation, and the rewrite of the monolith. |
 | Stakeholders | Digital Café Luna management, digital channel customers, on-site operations staff, the current dev/IT team behind the monolith, and the project team. |
 
