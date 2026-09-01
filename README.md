@@ -1,28 +1,28 @@
-# Digital Café Luna — Computación en Nube 2026-2 (EAFIT)
+# Digital Café Luna — Cloud Computing 2026-2 (EAFIT)
 
-**Grupo 1** · Peso total del proyecto: 30 %
+**Group 1** · Total project weight: 30%
 
-## Problemática
+## Problem Statement
 
-Digital Café Luna es una empresa con puntos físicos y canales digitales. Su canal digital opera hoy sobre una aplicación monolítica en infraestructura tradicional, con despliegues manuales, monitoreo limitado y poca visibilidad de seguridad y costos. Esto frena la capacidad del negocio de evolucionar ese canal con confianza y rapidez.
+Digital Café Luna is a company with physical locations and digital channels. Its digital channel currently runs as a monolithic application on traditional infrastructure, with manual deployments, limited monitoring, and poor visibility into security and costs. This limits the business's ability to evolve that channel with confidence and speed.
 
-El reto del equipo es acompañar una transformación progresiva hacia la nube. No se recibe una arquitectura resuelta: hay que entender el problema, plantear decisiones, implementarlas, validarlas y mejorarlas durante el semestre, sin necesidad de acertar la arquitectura final desde el primer día.
+The team's challenge is to support a progressive transformation toward the cloud. We are not given a finished architecture: we need to understand the problem, propose decisions, implement them, validate them, and improve them throughout the semester, without needing to get the final architecture right from day one.
 
-## Project charter
+## Project Charter
 
-| Campo | Respuesta del equipo |
+| Field | Team's Answer |
 |---|---|
-| Problema | El canal digital de Digital Café Luna corre hoy como una aplicación monolítica sobre infraestructura tradicional. Los despliegues son manuales, el monitoreo es limitado y hay poca visibilidad de seguridad y de costos. |
-| Objetivo | Acompañar una transformación progresiva del canal digital hacia la nube que mejore la capacidad de desplegar cambios, monitorear el servicio, gestionar la seguridad y dar visibilidad de costos. |
-| Alcance inicial | Entender a fondo el problema actual, refinar requerimientos funcionales y no funcionales, construir el backlog inicial y registrar hipótesis arquitectónicas sujetas a revisión en hitos posteriores. |
-| Fuera de alcance | La arquitectura final, la selección definitiva de servicios cloud, la implementación de la migración y la reescritura del monolito. |
-| Stakeholders | Gerencia de Digital Café Luna, clientes del canal digital, personal de operación de cada sede, equipo de desarrollo/TI actual del monolito, equipo del proyecto. |
+| Problem | Digital Café Luna's digital channel currently runs as a monolithic application on traditional infrastructure. Deployments are manual, monitoring is limited, and there is poor visibility into security and costs. |
+| Objective | Support a progressive transformation of the digital channel toward the cloud that improves the ability to deploy changes, monitor the service, manage security, and provide cost visibility. |
+| Initial scope | Thoroughly understand the current problem, refine functional and non-functional requirements, build the initial backlog, and register architectural hypotheses subject to review in later milestones. |
+| Out of scope | The final architecture, the definitive selection of cloud services, the migration implementation, and the rewrite of the monolith. |
+| Stakeholders | Digital Café Luna management, digital channel customers, on-site operations staff, the current dev/IT team behind the monolith, and the project team. |
 
-## Equipo y roles
+## Team and Roles
 
-| Integrante | Rol | Contribución concreta |
+| Member | Role | Concrete Contribution |
 |---|---|---|
-| Paulina Velásquez Londoño | Arquitectura de soluciones | Traducir el problema de negocio en alcance y requerimientos (en especial los no funcionales); asegurar la trazabilidad problema → requerimientos → backlog. |
-| Luis Alejandro Castrillón Pulgarín | Cloud / IaC Engineer | Plantear la hipótesis inicial de infraestructura y automatización que respalde los requerimientos de disponibilidad y despliegue. |
-| Martín Valencia Vallejo | Security / CloudOps Engineer (SecOps) | Definir el requerimiento y la hipótesis de seguridad de acceso a información sensible. |
-| Alberto Cervantes Forero | FinOps y documentación | Definir la hipótesis de visibilidad de costos y consolidar el documento entregable. |
+| Paulina Velásquez Londoño | Solutions Architecture | Translate the business problem into scope and requirements (especially the non-functional ones); ensure traceability from problem → requirements → backlog. |
+| Luis Alejandro Castrillón Pulgarín | Cloud / IaC Engineer | Propose the initial infrastructure and automation hypothesis supporting the availability and deployment requirements. |
+| Martín Valencia Vallejo | Security / CloudOps Engineer (SecOps) | Define the requirement and hypothesis for securing access to sensitive information. |
+| Alberto Cervantes Forero | FinOps and Documentation | Define the cost visibility hypothesis and consolidate the deliverable document. |
