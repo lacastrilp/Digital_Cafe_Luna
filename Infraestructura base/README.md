@@ -1,4 +1,12 @@
-# 🟢 LAB 1 — Plan completo
+## ¿Cómo demostramos qué recursos pueden comunicarse, por qué camino y con qué nivel de exposición?
+
+**Respuesta:**
+
+> Lo demostramos combinando direccionamiento, tablas de rutas, Internet Gateway, Security Groups y Network ACLs, y verificando el comportamiento mediante SSH y ping. La EC2 pública tiene IPv4 pública, pertenece a una subnet cuya tabla de rutas contiene `0.0.0.0/0 → IGW` y su Security Group permite SSH desde la IP del equipo. La EC2 privada no tiene IPv4 pública ni ruta por defecto hacia el IGW, pero puede recibir ICMP desde la EC2 pública mediante su Security Group. 
+
+---
+
+# LAB 1 — Infraestructura base
 
 La arquitectura será:
 
@@ -10,29 +18,32 @@ La arquitectura será:
                        │   IGW   │
                        └────┬────┘
                             │
-                 ┌──────────┴──────────┐
-                 │                     │
-          Public RT               Private RT
-        0.0.0.0/0 → IGW           SOLO local
-                 │                     │
-        ┌────────┴───────┐      ┌──────┴────────┐
-        │                │      │               │
-   Public A          Public B  Private A     Private B
- 10.20.10.0/24      10.20.20.0/24
- us-east-1a         us-east-1b
-        │                           │
-        │                           │
-   EC2 pública ──── ICMP ───────► EC2 privada
-   IPv4 pública                   SIN IPv4 pública
+                 ┌──────────┴─────────────────┐
+                 │                            │
+          Public RT                       Private RT
+        0.0.0.0/0 → IGW                   SOLO local
+                 │                            │
+        ┌────────┴───────┐             ┌──────┴────────┐
+        │                │             │               │
+   Public A          Public B       Private A     Private B
+ 10.20.10.0/24      10.20.20.0/24      │
+ us-east-1a         us-east-1b         │
+        │                              │
+        │                              │
+   EC2 pública ──── ICMP ───────►    EC2 privada
+   IPv4 pública                     SIN IPv4 pública
 ```
 
-El plan de direccionamiento indicado por el laboratorio es: VPC `10.20.0.0/16`, públicas `10.20.10.0/24` y `10.20.20.0/24`, privadas `10.20.110.0/24` y `10.20.120.0/24`, distribuidas entre `us-east-1a` y `us-east-1b`. 
+El plan de direccionamiento indicado por el laboratorio es: 
+- VPC `10.20.0.0/16`, 
+   - Públicas `10.20.10.0/24` y `10.20.20.0/24`
+   - Privadas `10.20.110.0/24` y `10.20.120.0/24`
+
+Distribuidas entre `us-east-1a` y `us-east-1b`. 
 
 ---
 
-# FASE 0 — Plan de red
-
-Antes de crear nada, usa esta tabla en tu informe:
+# FASE 0 — Red
 
 | Recurso   | CIDR             | AZ           | Propósito                     |
 | --------- | ---------------- | ------------ | ----------------------------- |
@@ -41,8 +52,6 @@ Antes de crear nada, usa esta tabla en tu informe:
 | Public B  | `10.20.20.0/24`  | `us-east-1b` | Capacidad pública/redundancia |
 | Private A | `10.20.110.0/24` | `us-east-1a` | Recursos internos             |
 | Private B | `10.20.120.0/24` | `us-east-1b` | Recursos internos             |
-
-Esto corresponde directamente al plan de referencia del documento. 
 
 ### Respuesta para el diseño
 
@@ -80,7 +89,17 @@ No necesitas crear NAT Gateway.
 
 Crea la VPC.
 
-El laboratorio pide explícitamente una VPC propia y no utilizar la Default VPC. 
+Comando para consultar las vpc:
+```bash
+aws ec2 describe-vpcs \
+  --region us-east-1 \
+  --filters "Name=tag:Name,Values=dcl-lab1-vpc" \
+  --query 'Vpcs[].{ID:VpcId,CIDR:CidrBlock,Default:IsDefault,State:State,Name:Tags[?Key==`Name`]|[0].Value}' \
+  --output table
+```
+
+![Imagen VPC](VPC.png)
+
 
 ---
 
@@ -127,8 +146,17 @@ Name: dcl-lab1-subnet-private-b
 AZ: us-east-1b
 IPv4 CIDR: 10.20.120.0/24
 ```
+Comando para consultar las subnets:
+```bash
+aws ec2 describe-subnets \
+  --region us-east-1 \
+  --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" \
+  --query 'Subnets[].{Name:Tags[?Key==`Name`]|[0].Value,CIDR:CidrBlock,AZ:AvailabilityZone,ID:SubnetId,PublicIP:MapPublicIpOnLaunch}' \
+  --output table
+```
 
-El PDF pide exactamente cuatro subnets distribuidas entre dos AZ. 
+![Imagen Subnets](Subnets.png)
+
 
 ---
 
@@ -146,34 +174,13 @@ Enable auto-assign public IPv4 address
 
 Haz lo mismo para **Public B**.
 
+![Imagen IPv4_TurnOn](IPv4_TurnOn.png)
+
 No es necesario habilitarlo en las privadas.
 
+![Imagen IPv4_TurnOff](IPv4_TurnOff.png)
+
 El laboratorio específicamente pide auto-assign público únicamente en las subnets públicas si utilizas esta estrategia. 
-
----
-
-# 📸 EVIDENCIA 1
-
-Antes de continuar, captura:
-
-**VPC → Subnets**
-
-donde se puedan ver las cuatro:
-
-```text
-dcl-lab1-subnet-public-a
-dcl-lab1-subnet-public-b
-dcl-lab1-subnet-private-a
-dcl-lab1-subnet-private-b
-```
-
-y sus:
-
-* CIDR
-* AZ
-* VPC
-
-Esta será la evidencia **1 — Plan de red / subnets**.
 
 ---
 
@@ -202,6 +209,18 @@ Selecciona:
 ```text
 dcl-lab1-vpc
 ```
+
+Comando para consultar el internet gateway:
+```bash
+aws ec2 describe-internet-gateways \
+  --region us-east-1 \
+  --filters "Name=attachment.vpc-id,Values=vpc-0cba829cb5c7746b2" \
+  --query 'InternetGateways[].{ID:InternetGatewayId,State:Attachments[0].State,VPC:Attachments[0].VpcId}' \
+  --output table
+
+```
+
+![Imagen IGW](IGW.png)
 
 ---
 
@@ -256,6 +275,21 @@ Selecciona:
 
 Guarda.
 
+
+Comando para consultar la tabla de ruta publica:
+```bash
+aws ec2 describe-route-tables \
+  --region us-east-1 \
+  --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=tag:Name,Values=dcl-rt-public" \
+  --query 'RouteTables[].{RouteTableId:RouteTableId, Routes:Routes[?GatewayId!=null].{DestinationCidrBlock:DestinationCidrBlock, GatewayId:GatewayId}, AssociatedSubnets:Associations[].SubnetId}' \
+  --output json
+```
+
+![Imagen Public_Route_Table](Public_Route_Table.png)
+
+
+
+
 ---
 
 # 2.4 Crear Route Table privada
@@ -293,41 +327,17 @@ Asocia:
 
 El documento exige exactamente que las públicas tengan `0.0.0.0/0 → IGW` y que las privadas no tengan ruta por defecto al IGW. 
 
----
 
-# 📸 EVIDENCIA 2 — Routing
-
-Esta captura es importante.
-
-Puedes mostrar:
-
-### Route table pública
-
-```text
-10.20.0.0/16 → local
-0.0.0.0/0 → dcl-lab1-igw
+Comando para consultar la tabla de ruta privada:
+```bash
+aws ec2 describe-route-tables \
+  --region us-east-1 \
+  --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=tag:Name,Values=dcl-rt-private" \
+  --query 'RouteTables[].{RouteTableId:RouteTableId, Routes:Routes[?GatewayId!=null].{DestinationCidrBlock:DestinationCidrBlock, GatewayId:GatewayId}, AssociatedSubnets:Associations[].SubnetId}' \
+  --output json
 ```
 
-y las asociaciones:
-
-```text
-public-a
-public-b
-```
-
-Luego una captura de la privada:
-
-```text
-10.20.0.0/16 → local
-```
-
-sin:
-
-```text
-0.0.0.0/0 → IGW
-```
-
-Esto demuestra la diferencia de exposición por **routing**.
+![Imagen Private_Route_Table](Private_Route_Table.png)
 
 ---
 
@@ -376,7 +386,7 @@ AWS debería colocar algo parecido a:
 X.X.X.X/32
 ```
 
-⚠️ **No uses `0.0.0.0/0`.**
+**No uses `0.0.0.0/0`.**
 
 El PDF exige SSH únicamente desde la IPv4 pública actual del equipo. 
 
@@ -397,6 +407,20 @@ Entonces el SG debe tener:
 ```text
 181.xxx.xxx.xxx/32
 ```
+
+Comando para consultar el grupo de seguridad publico:
+```bash
+aws ec2 describe-security-groups \
+    --region us-east-1 \
+    --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=group-name,Values=dcl-sg-public" \
+    --query 'SecurityGroups[*].IpPermissions' \
+    --output json
+```
+
+![Imagen Public_SG](Public_SG.png)
+
+
+
 
 ---
 
@@ -441,6 +465,19 @@ EC2 privada
 
 El PDF indica específicamente que el SG privado debe permitir ICMP IPv4 desde `dcl-lab1-sg-public`. 
 
+Comando para consultar el grupo de seguridad privado:
+```bash
+aws ec2 describe-security-groups \
+    --region us-east-1 \
+    --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=group-name,Values=dcl-sg-private" \
+    --query 'SecurityGroups[*].IpPermissions' \
+    --output json
+```
+
+![Imagen Private_SG](Private_SG.png)
+
+
+
 ---
 
 # FASE 3.3 — NACL privada
@@ -475,6 +512,16 @@ Selecciona:
 ☑ dcl-lab1-subnet-private-a
 ☑ dcl-lab1-subnet-private-b
 ```
+Comando para consultar el NACls:
+```bash
+aws ec2 describe-network-acls \
+    --region us-east-1 \
+    --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=tag:Name,Values=dcl-nacl-private" \
+    --output json
+```
+
+![Imagen NACLs](NACLs.png)
+
 
 ---
 
@@ -492,6 +539,20 @@ Source: 10.20.0.0/16
 Allow
 ```
 
+Comando para consultar las inboud rules del NACls:
+```bash
+aws ec2 describe-network-acls \
+    --region us-east-1 \
+    --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=tag:Name,Values=dcl-nacl-private" \
+    --query 'NetworkAcls[*].Entries[?Egress == `false`]' \
+    --output json
+```
+
+![Imagen InboundRules_NACLs](InboundRules_NACLs.png)
+
+
+
+
 ## Outbound rules
 
 Agrega:
@@ -508,37 +569,17 @@ El resto puede quedar con el **deny implícito**.
 
 Esto corresponde al requisito del PDF: permitir tráfico IPv4 dentro del CIDR de la VPC en entrada y salida, manteniendo bloqueado implícitamente lo que venga de otros orígenes. 
 
----
 
-# 📸 EVIDENCIA 3 — SG + NACL
-
-Captura donde puedas demostrar:
-
-### SG público
-
-```text
-SSH TCP 22
-Source: TU_IP/32
+Comando para consultar las outbound rules del NACls:
+```bash
+aws ec2 describe-network-acls \
+    --region us-east-1 \
+    --filters "Name=vpc-id,Values=vpc-0cba829cb5c7746b2" "Name=tag:Name,Values=dcl-nacl-private" \
+    --query 'NetworkAcls[*].Entries[?Egress == `true`]' \
+    --output json
 ```
 
-### SG privado
-
-```text
-ICMP
-Source: dcl-lab1-sg-public
-```
-
-### NACL privada
-
-```text
-Inbound:
-100 → 10.20.0.0/16 → ALLOW
-
-Outbound:
-100 → 10.20.0.0/16 → ALLOW
-```
-
-Esta evidencia demuestra los controles a nivel de **recurso** y **subnet**. El documento distingue SG como control stateful y NACL como stateless. 
+![Imagen OutboundRules_NACLs](OutboundRules_NACLs.png)
 
 ---
 
@@ -608,6 +649,25 @@ dcl-lab1-sg-public
 
 Lanza la instancia.
 
+Comando para consultar la public EC2:
+```bash
+aws ec2 describe-instances \
+    --region us-east-1 \
+    --filters "Name=tag:Name,Values=dcl-lab1-ec2-public" \
+    --query 'Reservations[*].Instances[*].{
+        Nombre: Tags[?Key==`Name`] | [0].Value,
+        AMI: ImageId,
+        Tipo: InstanceType,
+        KeyName: KeyName,
+        SubnetId: SubnetId,
+        PublicIPAsignada: PublicIpAddress,
+        SecurityGroups: SecurityGroups[*].GroupId
+    }' \
+    --output json
+```
+
+![Imagen Public_EC2](Public_EC2.png)
+
 ---
 
 # EC2 privada
@@ -650,6 +710,27 @@ dcl-lab1-sg-private
 
 Lanza.
 
+
+Comando para consultar la private EC2:
+```bash
+aws ec2 describe-instances \
+    --region us-east-1 \
+    --filters "Name=tag:Name,Values=dcl-lab1-ec2-private" \
+    --query 'Reservations[*].Instances[*].{
+        Nombre: Tags[?Key==`Name`] | [0].Value,
+        AMI: ImageId,
+        Tipo: InstanceType,
+        KeyName: KeyName,
+        SubnetId: SubnetId,
+        PublicIPAsignada: PublicIpAddress,
+        SecurityGroups: SecurityGroups[*].GroupId
+    }' \
+    --output json
+```
+
+![Imagen Private_EC2](Private_EC2.png)
+
+
 ---
 
 # FASE 4.1 — Verificación de direccionamiento
@@ -663,54 +744,7 @@ aws ec2 describe-instances \
   --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,ID:InstanceId,Subnet:SubnetId,AZ:Placement.AvailabilityZone,PrivateIP:PrivateIpAddress,PublicIP:PublicIpAddress,State:State.Name}' \
   --output table
 ```
-
-Queremos:
-
-```text
-dcl-lab1-ec2-public
-PublicIP: X.X.X.X
-PrivateIP: 10.20.10.X
-```
-
-y:
-
-```text
-dcl-lab1-ec2-private
-PublicIP: None
-PrivateIP: 10.20.110.X
-```
-
-### 📸 EVIDENCIA 4
-
-Esta es la evidencia:
-
-> Solo la EC2 pública posee IPv4 pública y ambas están en la subnet correcta.
-
-El documento exige exactamente esa comprobación. 
-
----
-
-# FASE 5 — Probar conectividad
-
-Aquí viene la parte que más valor tiene en la evaluación.
-
-Obtén las IP:
-
-```bash id="zx1p6n"
-aws ec2 describe-instances \
-  --region us-east-1 \
-  --filters "Name=tag:Name,Values=dcl-lab1-ec2-public,dcl-lab1-ec2-private" \
-  --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`]|[0].Value,PrivateIP:PrivateIpAddress,PublicIP:PublicIpAddress}' \
-  --output table
-```
-
-Guarda la IP privada de la EC2 privada.
-
-Por ejemplo:
-
-```text
-10.20.110.25
-```
+![Imagen DIR_EC2s](DIR_EC2s.png)
 
 ---
 
@@ -718,7 +752,7 @@ Por ejemplo:
 
 Desde tu Kali:
 
-```bash id="em0f89"
+```bash
 ssh -i TU-CLAVE.pem ec2-user@IP_PUBLICA
 ```
 
@@ -748,6 +782,9 @@ EC2 pública
 
 El laboratorio pide demostrar acceso SSH únicamente a la EC2 pública. 
 
+![Imagen Conexion_Public_EC2(1)](Conexion_Public_EC2(1).png)
+![Imagen Conexion_Public_EC2(2)](Conexion_Public_EC2(2).png)
+
 ---
 
 # 5.2 Ping pública → privada
@@ -758,34 +795,9 @@ Una vez dentro de la EC2 pública:
 ping -c 4 IP_PRIVADA
 ```
 
-Ejemplo:
-
-```bash
-ping -c 4 10.20.110.25
-```
-
-Esperamos:
-
-```text
-64 bytes from 10.20.110.25
-64 bytes from 10.20.110.25
-64 bytes from 10.20.110.25
-64 bytes from 10.20.110.25
-```
-
 Esto demuestra comunicación privada entre las dos EC2.
 
-La prueba requerida por el laboratorio es precisamente ping desde la EC2 pública hacia la IP privada de la EC2 privada. 
-
-### 📸 EVIDENCIA 5
-
-Captura del:
-
-```bash
-ping -c 4 IP_PRIVADA
-```
-
-con respuestas exitosas.
+![Imagen PingWithICMPSecurityGroup](PingWithICMPSecurityGroup.jpeg)
 
 ---
 
@@ -802,19 +814,7 @@ ICMP ← SG público
 
 y el ping funciona.
 
----
-
-## 6.1 Estado PERMITIDO
-
-Ejecuta:
-
-```bash id="f9q7qz"
-ping -c 4 IP_PRIVADA
-```
-
-Debe funcionar.
-
-📸 **Captura A — PERMITIDO**
+![Imagen PingWithICMPSecurityGroup](PingWithICMPSecurityGroup.jpeg)
 
 ---
 
@@ -837,29 +837,7 @@ Source: dcl-lab1-sg-public
 
 Guarda.
 
----
-
-# 6.3 Probar nuevamente
-
-En la EC2 pública:
-
-```bash id="ghqv5m"
-ping -c 4 IP_PRIVADA
-```
-
-Ahora esperamos:
-
-```text
-Request timeout
-```
-
-o:
-
-```text
-100% packet loss
-```
-
-📸 **Captura B — BLOQUEADO**
+![Imagen PingsinICMPSecurityGroup](PingsinICMPSecurityGroup.jpeg)
 
 ---
 
@@ -876,175 +854,25 @@ Source: dcl-lab1-sg-public
 
 Guarda.
 
----
-
-# 6.5 Probar nuevamente
-
-```bash id="xdh7co"
-ping -c 4 IP_PRIVADA
-```
-
-Ahora debe volver a funcionar.
-
-📸 **Captura C — RESTAURADO**
+![Imagen PingWithICMPSecurityGroup](PingWithICMPSecurityGroup.jpeg)
 
 ---
 
-# ⭐ La explicación que debes dar al profesor
+# La explicación
 
 > **El bloqueo se produjo modificando únicamente el Security Group de la EC2 privada. No fue necesario cambiar las IP, las subnets ni las tablas de rutas. Por eso demostramos que el direccionamiento y el camino de red permanecieron iguales, mientras que el control de tráfico modificó el comportamiento de la comunicación.**
 
-Esto responde directamente al punto 34 del laboratorio. 
-
 ---
 
-# 🧠 Respuestas para las preguntas del LAB 1
-
-## Pregunta: ¿Cómo demostramos qué recursos pueden comunicarse, por qué camino y con qué nivel de exposición?
-
-**Respuesta:**
-
-> Lo demostramos combinando direccionamiento, tablas de rutas, Internet Gateway, Security Groups y Network ACLs, y verificando el comportamiento mediante SSH y ping. La EC2 pública tiene IPv4 pública, pertenece a una subnet cuya tabla de rutas contiene `0.0.0.0/0 → IGW` y su Security Group permite SSH desde la IP del equipo. La EC2 privada no tiene IPv4 pública ni ruta por defecto hacia el IGW, pero puede recibir ICMP desde la EC2 pública mediante su Security Group. 
-
----
-
-## Pregunta de cierre
+## Pregunta
 
 > **Si Digital Café Luna necesitara conectar una oficina con esta VPC sin publicar la capa privada en Internet, ¿qué aspecto de la arquitectura debería evolucionar y qué debería permanecer igual?**
 
-### Respuesta recomendada:
+### Respuesta:
 
 > **Debería evolucionar la conectividad de red, incorporando un mecanismo de conexión privada entre la oficina y la VPC, mientras deberían permanecer iguales la segmentación pública/privada, el direccionamiento y los controles de acceso de la capa privada. La conexión permitiría que la oficina alcance las redes privadas mediante un camino privado, sin convertirlas en recursos públicos de Internet.**
 
-Una versión más corta para defensa oral:
-
-> **Evolucionaría el camino de conectividad entre la oficina y la VPC, pero conservaría la segmentación, las rutas internas y los controles de seguridad de la capa privada.**
-
 ---
-
-# 🧹 FASE 7 — Cleanup
-
-Al terminar las pruebas:
-
-Ve a:
-
-**EC2 → Instances**
-
-Termina:
-
-```text
-dcl-lab1-ec2-public
-dcl-lab1-ec2-private
-```
-
-El PDF exige que las dos EC2 temporales estén terminadas al cierre. 
-
-### Puedes conservar:
-
-```text
-dcl-lab1-vpc
-dcl-lab1-subnet-public-a
-dcl-lab1-subnet-public-b
-dcl-lab1-subnet-private-a
-dcl-lab1-subnet-private-b
-dcl-lab1-igw
-dcl-lab1-rt-public
-dcl-lab1-rt-private
-dcl-lab1-sg-public
-dcl-lab1-sg-private
-dcl-lab1-nacl-private
-```
-
-El documento pide conservar la red base para continuidad. 
-
-Si el Key Pair fue creado **solo** para este laboratorio y no lo necesitas, también puede eliminarse.
-
----
-
-# 📑 Las 7 evidencias que debes entregar
-
-Te recomiendo organizar el PDF exactamente así:
-
-### Evidencia 1 — Plan de red
-
-Tabla:
-
-```text
-VPC 10.20.0.0/16
-Public A 10.20.10.0/24 us-east-1a
-Public B 10.20.20.0/24 us-east-1b
-Private A 10.20.110.0/24 us-east-1a
-Private B 10.20.120.0/24 us-east-1b
-```
-
-### Evidencia 2 — Routing
-
-Mostrar:
-
-```text
-PUBLIC:
-0.0.0.0/0 → IGW
-
-PRIVATE:
-solo local
-```
-
-### Evidencia 3 — Security
-
-Mostrar:
-
-```text
-SSH → TU_IP/32
-ICMP → SG público
-NACL → 10.20.0.0/16
-```
-
-### Evidencia 4 — EC2
-
-Mostrar:
-
-```text
-Public EC2 → Public IPv4
-Private EC2 → No Public IPv4
-```
-
-### Evidencia 5 — Conectividad
-
-```text
-ping pública → privada
-SUCCESS
-```
-
-### Evidencia 6 — Control
-
-Tres estados:
-
-```text
-PERMITIDO
-   ↓
-BLOQUEADO
-   ↓
-RESTAURADO
-```
-
-### Evidencia 7 — Cleanup
-
-Mostrar:
-
-```text
-dcl-lab1-ec2-public   terminated
-dcl-lab1-ec2-private  terminated
-```
-
-y la red base conservada.
-
-El PDF define exactamente estas siete evidencias mínimas. 
-
----
-
-## ⭐ Y estas son las tres afirmaciones que tienes que poder defender
-
-Al final, el profesor debería poder preguntarte y tú responder:
 
 **1. ¿Por qué la EC2 pública es pública?**
 
@@ -1057,19 +885,3 @@ Al final, el profesor debería poder preguntarte y tú responder:
 **3. ¿Cómo bloqueaste el ping sin tocar rutas?**
 
 > Eliminando temporalmente la regla ICMP del Security Group privado. Las IP, subnets y rutas permanecieron iguales; solo cambió el control de tráfico.
-
-Estas tres afirmaciones son literalmente el criterio de cierre del laboratorio. 
-
-### Empecemos por la consola
-
-Haz primero **VPC + las 4 subnets** en `us-east-1`. **No crees todavía las EC2.** Cuando tengas las cuatro subnets creadas, ejecuta este comando en CloudShell:
-
-```bash id="jby5kw"
-aws ec2 describe-subnets \
-  --region us-east-1 \
-  --filters "Name=vpc-id,Values=$(aws ec2 describe-vpcs --region us-east-1 --filters Name=tag:Name,Values=dcl-lab1-vpc --query 'Vpcs[0].VpcId' --output text)" \
-  --query 'Subnets[].{Name:Tags[?Key==`Name`]|[0].Value,CIDR:CidrBlock,AZ:AvailabilityZone,ID:SubnetId}' \
-  --output table
-```
-
-Pásame esa salida y verificamos **CIDR + AZ + nombres** antes de construir el routing. Así evitamos que un error de subnet nos dañe las pruebas posteriores.
