@@ -1,6 +1,4 @@
-Sí. Para el **Laboratorio 3 (S06)** el objetivo es dar el salto de las dos EC2 independientes del Lab 2 a una arquitectura con **un único endpoint (ALB), balanceo, health checks y recuperación de capacidad mediante ASG**. El documento indica explícitamente que el ALB distribuye capacidad existente, mientras que el ASG mantiene la capacidad deseada. 
-
-## 1. Arquitectura que debemos construir
+## 1. Arquitectura
 
 ```text
                          Internet
@@ -12,17 +10,17 @@ Sí. Para el **Laboratorio 3 (S06)** el objetivo es dar el salto de las dos EC2 
                   |       :80         |
                   +---------+---------+
                             |
-                   Target Group
-                  dcl-dev-tg-web
-                    /           \
-                   v             v
-             EC2 Instance A   EC2 Instance B
-                AZ 2a            AZ 2b
-                   \             /
-                    \           /
-                     Auto Scaling
-                      Group
-                  desired = 2
+                       Target Group
+                      dcl-dev-tg-web
+                       /           \
+                      v             v
+             EC2 Instance A    EC2 Instance B
+                  AZ 2a            AZ 2b
+                     \             /
+                      \           /
+                      Auto Scaling
+                          Group
+                       desired = 2
 ```
 
 La configuración del laboratorio pide:
@@ -35,11 +33,7 @@ La configuración del laboratorio pide:
 * ASG: **min = 2, desired = 2, max = 4**
 * Health checks del ASG: **EC2**, sin habilitar ELB health checks como fuente adicional de reemplazo en este laboratorio. 
 
-> Ojo: en el PDF aparece `max = 4.5`, pero `MaxSize` de un ASG debe ser un entero; probablemente es un error de formato del documento. **No lo cambiaría todavía** sin comprobar la consola/instrucción exacta de tu laboratorio.
-
 ---
-
-# 2. Las cuatro preguntas conceptuales
 
 ### ¿Qué responsabilidad cumple el ALB que antes recaía en el usuario que elegía una IP?
 
@@ -56,17 +50,13 @@ En otras palabras:
 
 > **El ALB abstrae las IP individuales de las instancias y proporciona un único punto de entrada para distribuir el tráfico.**
 
-Esto corresponde al objetivo de la Fase 5: un solo endpoint frente a múltiples instancias. 
-
 ---
 
 ### ¿Qué determina que un target sea elegible para recibir nuevas solicitudes?
 
 Principalmente, su **estado de salud dentro del Target Group**.
 
-El laboratorio lo expresa directamente: el Target Group determina qué destinos son elegibles para nuevas solicitudes. Si un target falla los health checks y existe otro healthy, el ALB deja de enviarle nuevas solicitudes. 
-
-Respuesta corta para entregar:
+El Target Group determina qué destinos son elegibles para nuevas solicitudes. Si un target falla los health checks y existe otro healthy, el ALB deja de enviarle nuevas solicitudes. 
 
 > **La elegibilidad depende del estado del target en el Target Group y de los health checks. Un target unhealthy deja de recibir nuevas solicitudes mientras exista otro target healthy.**
 
@@ -141,7 +131,7 @@ Desired = 2
 Running = 1
 ```
 
-El ASG debe lanzar/reponer capacidad:
+El ASG debe reponer la capacidad:
 
 ```text
 DESPUÉS
@@ -157,11 +147,9 @@ El laboratorio espera precisamente observar la caída temporal de capacidad y po
 
 ---
 
-# 3. Evidencias que tienes que capturar
+# Evidencias
 
-Te recomiendo llevarlas en este orden.
-
-### Evidencia 1 — ALB
+### ALB
 
 Ejecuta:
 
@@ -172,18 +160,11 @@ aws elbv2 describe-load-balancers \
   --output table
 ```
 
-Debes obtener algo equivalente a:
-
-```text
-Name          DNS                                      State
-dcl-dev-alb   dcl-dev-alb-xxxxx.us-east-2.elb.amazonaws.com  active
-```
-
-El laboratorio pide específicamente captura/tabla con **DNS y estado del ALB**. 
+![Imagen ALBTable](ALBTable.png)
 
 ---
 
-### Evidencia 2 — Dos respuestas HTTP diferentes
+### Dos respuestas HTTP diferentes
 
 Abre:
 
@@ -193,24 +174,11 @@ http://DNS-DEL-ALB
 
 Refresca varias veces.
 
-El laboratorio pide que observes **al menos dos respuestas diferentes**, identificando:
-
-* Region
-* Availability Zone
-* Instance ID
-* Private IP
-* Public IP, si aplica. 
-
-Si el navegador reutiliza la respuesta, el propio laboratorio recomienda ventana privada o parámetros como:
-
-```text
-http://DNS-DEL-ALB/?v=1
-http://DNS-DEL-ALB/?v=2
-```
+![Imagen HTTPResponses](HTTPResponses.png)
 
 ---
 
-# 4. Evidencia del Target Group
+# Target Group
 
 Necesitamos obtener primero el ARN:
 
@@ -220,6 +188,7 @@ aws elbv2 describe-target-groups \
   --query 'TargetGroups[].{Name:TargetGroupName,ARN:TargetGroupArn,Port:Port,Protocol:Protocol}' \
   --output table
 ```
+![Imagen ARN](ARN.png)
 
 Luego:
 
@@ -230,170 +199,131 @@ aws elbv2 describe-target-health \
   --output table
 ```
 
-La evidencia debe mostrar:
+![Imagen Targets](Targets.png)
+
 
 ### Antes de Prueba A
 
-```text
-Target              State
-i-xxxxxxxxxxxx      healthy
-i-yyyyyyyyyyyy      healthy
-```
+> Targets
+
+![Imagen TargetsBeforeAfterDuringProofA](<Proof A/TargetsBeforeAfterDuringProofA.png>)
+
+
+> ASG 
+
+![Imagen ASGbeforeAfterDuringProofA](<Proof A/ASGbeforeAfterDuringProofA.png>)
+
+
+> Instances 
+
+![Imagen InstancesBeforeAfterDuringProofA](<Proof A/InstancesBeforeAfterDuringProofA.png>)
 
 ### Durante Prueba A
 
-Puede aparecer:
+> Targets
 
-```text
-Target              State
-i-xxxxxxxxxxxx      unhealthy
-i-yyyyyyyyyyyy      healthy
-```
+![Imagen TargetsBeforeAfterDuringProofA](<Proof A/TargetsBeforeAfterDuringProofA.png>)
 
-**Pero no debes fabricar esa transición.**
+> ASG 
 
-El documento dice expresamente que si el target se recupera antes de llegar a `unhealthy`, debes registrar lo que realmente observaste. 
+![Imagen ASGbeforeAfterDuringProofA](<Proof A/ASGbeforeAfterDuringProofA.png>)
 
-La instancia se recupera muy rapido al reiniciar, tanto que no cambia nada en ALB, ASG, Target groups, ni la instancia.
 
-### Después
+> Instances 
 
-Esperamos finalmente:
+![Imagen InstancesBeforeAfterDuringProofA](<Proof A/InstancesBeforeAfterDuringProofA.png>)
 
-```text
-Target              State
-i-xxxxxxxxxxxx      healthy
-i-yyyyyyyyyyyy      healthy
-```
+### Después Prueba A
 
----
+> Targets
 
-# 5. Evidencia del ASG
+![Imagen TargetsBeforeAfterDuringProofA](<Proof A/TargetsBeforeAfterDuringProofA.png>)
 
-Ejecuta:
 
-```bash
-aws autoscaling describe-auto-scaling-groups \
-  --auto-scaling-group-names dcl-dev-asg-web \
-  --query 'AutoScalingGroups[].{Min:MinSize,Desired:DesiredCapacity,Max:MaxSize,Instances:Instances[].{Id:InstanceId,State:LifecycleState,Health:HealthStatus}}' \
-  --output json
-```
+> ASG 
 
-El laboratorio proporciona este comando específicamente para verificar el ASG. 
+![Imagen ASGbeforeAfterDuringProofA](<Proof A/ASGbeforeAfterDuringProofA.png>)
+
+
+> Instances 
+
+![Imagen InstancesBeforeAfterDuringProofA](<Proof A/InstancesBeforeAfterDuringProofA.png>)
 
 ---
 
-# 6. Prueba A — REBOOT
-La instancia se recupera muy rapido al reiniciar, tanto que no cambia nada en ALB, ASG, Target groups, ni la instancia.
-Primero:
+**Conclusión:** La instancia se recupera muy rapido al reiniciar, tanto que no cambia nada en ALB, ASG, Target groups, ni la instancia.
 
-```text
-2 targets → healthy
-```
-
-Seleccionas **una instancia del ASG** y haces:
-
-**EC2 → Instance state → Reboot instance**
-
-No hagas `Terminate`.
-
-Durante el reboot observa simultáneamente:
-
-1. Estado de EC2.
-2. Target Group.
-3. ALB.
-4. ASG.
-
-El documento indica que durante el reboot la instancia puede permanecer `Running`, mientras los status checks pueden verse afectados temporalmente. 
-
-### Evidencias de Prueba A
-
-Necesitas:
-
-```text
-Target Group antes
-        ↓
-Target Group durante
-        ↓
-Target Group después
-```
-
-Y además:
-
-```text
-ASG durante Prueba A
-```
-
-**No concluyas automáticamente "el ASG reemplazó la instancia".** El laboratorio explícitamente pide registrar lo observado. 
-La instancia se recupera muy rapido al reiniciar, tanto que no cambia nada en ALB, ASG, Target groups, ni la instancia.
 ---
 
-# 7. Prueba B — TERMINATE
+# Prueba B — TERMINATE
 
-Aquí sí hacemos:
+Aquí hacemos:
 
 **EC2 → Instance state → Terminate instance**
 
-Primero captura:
 
-```text
-Desired = 2
-Instance A
-Instance B
-```
+### Antes de Prueba B
 
-Luego terminas una.
+> Targets
 
-Temporalmente:
+![Imagen TargetsAfterBeforeAfterProofB](<Proof B//BeforeAfter/TargetsAfterBeforeAfterProofB.png>)
 
-```text
-Desired = 2
-Instances = 1
-```
 
-Después espera:
+> ASG 
 
-```text
-Desired = 2
-Instances = 2
-```
+![Imagen ASGAfterBeforeAfterProofB](<Proof B//BeforeAfter/ASGAfterBeforeAfterProofB.png>)
 
-Y finalmente verifica el Target Group.
 
-Debe aparecer una **nueva Instance ID** en estado:
+> Instances 
 
-```text
-healthy
-```
+![Imagen InstancesAfterBeforeAfterProofB](<Proof B//BeforeAfter/InstancesAfterBeforeAfterProofB.png>)
 
-Eso es una de las evidencias mínimas explícitas del laboratorio. 
+### Durante Prueba B
+
+> Targets
+
+
+![Imagen TargetsDuringProofB](<Proof B/During/TargetsDuringProofB.jpeg>)
+
+![Imagen TargetsSecondDuringProofB](<Proof B/During/TargetsSecondDuringProofB.jpeg>)
+
+
+> ASG 
+
+![Imagen ASGDuringProofB](<Proof B/During/ASGDuringProofB.jpeg>)
+
+
+> Instances 
+
+![Imagen InstancesDuringProofB](<Proof B/During/InstancesDuringProofB.jpeg>)
+
+
+### Después Prueba B
+
+> Targets
+
+![Imagen TargetsAfterBeforeAfterProofB](<Proof B//BeforeAfter/TargetsAfterBeforeAfterProofB.png>)
+
+
+> ASG 
+
+![Imagen ASGAfterBeforeAfterProofB](<Proof B//BeforeAfter/ASGAfterBeforeAfterProofB.png>)
+
+
+> Instances 
+
+![Imagen InstancesAfterBeforeAfterProofB](<Proof B//BeforeAfter/InstancesAfterBeforeAfterProofB.png>)
+
+### Respuesta HTTP antes y despues
+
+![Imagen HTTPResponses](<Proof B//BeforeAfter/HTTPResponses.png>)
+
+
+### Targets Finales
+
+![Imagen NewTargets](NewTargets.png)
 
 ---
 
-## 8. Tabla de evidencias para tu informe
-
-Puedes organizarlo así:
-
-| Evidencia | Qué demostrar                                   |
-| --------- | ----------------------------------------------- |
-| E1        | ALB `dcl-dev-alb` activo + DNS                  |
-| E2        | Respuesta HTTP desde instancia 1                |
-| E3        | Respuesta HTTP desde instancia 2                |
-| E4        | Target Group: 2 targets healthy antes de A      |
-| E5        | Target Group durante reboot                     |
-| E6        | Target Group después de reboot                  |
-| E7        | Estado ASG durante Prueba A                     |
-| E8        | ASG antes de Prueba B: desired=2                |
-| E9        | ASG después de terminar instancia               |
-| E10       | Nueva Instance ID registrada                    |
-| E11       | Nueva Instance ID = `healthy`                   |
-| E12       | Nueva instancia atendiendo tráfico mediante DNS |
-
-### Y la idea central que debes demostrar
-
 > **ALB = un único endpoint + distribución de tráfico + exclusión de targets no saludables.**
 > **ASG = mantenimiento de la capacidad deseada mediante reemplazo de instancias terminadas.**
-
-Eso es exactamente el salto conceptual de S05/Lab 02 a S06: **balanceo + salud + capacidad repetible**. 
-
-**Podemos hacerlo paso a paso en AWS.** El siguiente paso es verificar si ya existen `dcl-dev-alb`, `dcl-dev-tg-web`, `dcl-dev-lt-web` y `dcl-dev-asg-web`, antes de crear nada.
