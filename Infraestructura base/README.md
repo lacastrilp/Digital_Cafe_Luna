@@ -1,11 +1,3 @@
-Sí. Vamos a hacer el **LAB 1 completo**, principalmente desde la **interfaz gráfica de AWS**, y después usaremos CloudShell/Kali para las verificaciones y pruebas.
-
-He revisado el PDF del Lab 1. La evaluación exige una VPC propia, **4 subredes en 2 AZ**, IGW, tablas de rutas separadas, SG, NACL y dos EC2 temporales; además hay que demostrar **permitido → bloqueado → restaurado**. 
-
-> ⚠️ **Importante respecto al Lab 4:** este PDF especifica `us-east-1` (N. Virginia), mientras que tu infraestructura anterior está en `us-east-2` (Ohio). Para este LAB 1 te recomiendo seguir el PDF y trabajar en **us-east-1**, con recursos llamados `dcl-lab1-*`. No reutilices la VPC `dcl-dev-vpc` de Ohio para este laboratorio. El PDF explícitamente pide `us-east-1` y una VPC propia, no la Default VPC. 
-
----
-
 # 🟢 LAB 1 — Plan completo
 
 La arquitectura será:
