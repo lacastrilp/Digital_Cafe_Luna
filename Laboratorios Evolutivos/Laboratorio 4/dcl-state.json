@@ -1,6 +1,0 @@
-{
-  "project": "Digital Cafe Luna",
-  "environment": "dev",
-  "message": "Estado persistente almacenado fuera de EC2",
-  "version": 1
-}
