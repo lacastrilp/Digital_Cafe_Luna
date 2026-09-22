@@ -1032,6 +1032,134 @@ En este flujo asíncrono, el productor envía el mensaje a SQS y puede finalizar
 
 ---
 
+## 13.9 Conceptos clave: `at-least-once` y orden best-effort
+
+### ¿Qué significa `at-least-once`?
+
+Significa que SQS intenta entregar cada mensaje al menos una vez, pero no garantiza que se entregue una sola vez. Por eso un mismo mensaje puede recibirse nuevamente, incluso después de un procesamiento aparentemente exitoso.
+
+La aplicación debe tolerar duplicados. En este laboratorio, el `MessageId` permite demostrar que el mismo mensaje reapareció después de no ejecutar `DeleteMessage`.
+
+### ¿Qué significa orden best-effort?
+
+Significa que SQS Standard intenta conservar el orden de envío cuando es posible, pero no lo garantiza. Por ejemplo, se pueden enviar `DCL-002`, `DCL-003` y `DCL-004` y recibirlos en otro orden.
+
+`At-least-once` responde a la pregunta “¿cuántas veces puede llegar un mensaje?”. Orden best-effort responde a “¿en qué orden pueden llegar los mensajes?”. Son propiedades diferentes.
+
+Si el sistema necesita orden estricto, debe evaluarse una cola SQS FIFO y un diseño compatible con sus restricciones. Este laboratorio utiliza una cola Standard.
+
+---
+
+## 13.10 ¿Qué revisar si algo falla?
+
+| Síntoma | Qué revisar primero | Comando o evidencia |
+|---|---|---|
+| `AccessDenied` | Identidad de la EC2, Instance Profile, ARN de la cola y acciones permitidas | `aws sts get-caller-identity` y policy IAM |
+| `QueueDoesNotExist` | Región, Queue URL y nombre exacto de la cola | `echo "$AWS_REGION"` y `echo "$QUEUE_URL"` |
+| El productor no envía | Variables de entorno, conectividad HTTPS y permiso `sqs:SendMessage` | `echo "$QUEUE_URL"` y salida de `producer.py` |
+| El consumidor no recibe | Queue URL, región, long polling y permiso `sqs:ReceiveMessage` | Salida de `consumer.py` y atributos SQS |
+| El mensaje se recibe pero no se elimina | Excepción durante el procesamiento, `ReceiptHandle` y permiso `sqs:DeleteMessage` | Buscar `DELETED` y revisar el traceback |
+| El mensaje reaparece | `DeleteMessage` no se ejecutó, falló o venció el VisibilityTimeout | Comparar `MessageId` y `ApproximateReceiveCount` |
+| El backlog aparece en cero | El consumidor sigue activo, el mensaje está invisible o el atributo es aproximado | Detener consumidor y consultar ambos atributos |
+| No conecta por SSH | IP pública, ruta a Internet, puerto 22, origen del Security Group y usuario | Estado EC2 y reglas del Security Group |
+| La EC2 no accede a SQS | Ruta de salida, DNS, NACL, región y permisos IAM | `aws sts get-caller-identity` y estado de red |
+| El programa termina inesperadamente | Sintaxis, versión de Python, boto3 y variables obligatorias | `python3.11 -m py_compile producer.py consumer.py` |
+
+### Orden de diagnóstico recomendado
+
+1. Confirmar región y variables: `AWS_REGION` y `QUEUE_URL`.
+2. Confirmar identidad: `aws sts get-caller-identity`.
+3. Confirmar que la cola existe y revisar sus atributos.
+4. Revisar la salida del productor y del consumidor.
+5. Revisar IAM, Security Group y conectividad solamente si el problema continúa.
+
+---
+
+## 13.11 ¿Qué ocurre si se elimina o detiene un componente?
+
+| Componente eliminado o detenido | Consecuencia | Qué permanece y qué se debe hacer |
+|---|---|---|
+| `consumer.py` | No se procesan mensajes nuevos y aumenta el backlog visible | SQS conserva los mensajes; se reactiva el consumidor para procesarlos |
+| `producer.py` | No se generan mensajes nuevos | Los mensajes ya enviados permanecen en SQS; se corrige o reinicia el productor |
+| Cola SQS | Se pierde el intermediario y los mensajes almacenados pueden eliminarse | Productor y consumidor fallan; se debe crear otra cola y actualizar `QUEUE_URL` |
+| EC2 | Se detienen productor y consumidor porque ambos viven en la instancia | SQS puede conservar mensajes, pero no habrá consumidor; se inicia otra EC2 o se recupera la existente |
+| IAM Role o policy | La EC2 pierde autorización para llamar a SQS | Aparecen errores `AccessDenied`; se restaura el role, Instance Profile o policy |
+| Instance Profile | La EC2 deja de obtener credenciales temporales del role | `aws sts get-caller-identity` falla o cambia la identidad; se vuelve a asociar el profile |
+| Security Group | Puede bloquear SSH o la salida necesaria | No se puede administrar la EC2 o acceder a AWS; se restauran las reglas correctas |
+| Subnet, ruta o Internet Gateway | La EC2 puede perder conectividad con AWS APIs y SSH | Se revisan rutas, IP pública, NACL y salida HTTPS |
+
+**Punto importante:** eliminar `consumer.py` no elimina los mensajes de SQS. El desacoplamiento permite que la cola conserve el trabajo pendiente. Eliminar la cola sí elimina el intermediario y debe considerarse una acción destructiva.
+
+---
+
+## 13.12 Preguntas posibles del profesor
+
+### ¿Por qué el productor puede funcionar con el consumidor apagado?
+
+Porque el productor solo necesita entregar el mensaje a SQS. La cola conserva el mensaje aunque el consumidor no esté disponible.
+
+### ¿Qué confirma que un mensaje fue procesado correctamente?
+
+La secuencia `RECEIVED` → `PROCESSED` → `DELETED`. `ReceiveMessage` por sí solo no confirma el procesamiento.
+
+### ¿Qué pasa si el consumidor recibe un mensaje y se cae antes de borrarlo?
+
+El mensaje permanece invisible durante el VisibilityTimeout. Después puede reaparecer y ser recibido otra vez. Esto explica la entrega `at-least-once`.
+
+### ¿Por qué se usa `ReceiptHandle` y no `MessageId` para borrar?
+
+Porque `ReceiptHandle` identifica la recepción actual del mensaje. Puede cambiar en cada reintento; `MessageId` identifica el mensaje lógico, pero no autoriza por sí solo su eliminación.
+
+### ¿Puede aparecer dos veces el mismo `MessageId`?
+
+Sí. SQS Standard permite entregas repetidas. El consumidor debe ser tolerante a duplicados o implementar idempotencia en un sistema real.
+
+### ¿Puede llegar `DCL-004` antes que `DCL-002`?
+
+Sí. En una cola Standard el orden es best-effort, no estricto. El laboratorio no debe usar el orden como criterio de aceptación.
+
+### ¿Qué diferencia hay entre un mensaje visible y uno no visible?
+
+Un mensaje visible puede ser recibido. Uno no visible ya fue recibido y está temporalmente oculto durante el VisibilityTimeout.
+
+### ¿Por qué el backlog se llama aproximado?
+
+Porque `ApproximateNumberOfMessages` y `ApproximateNumberOfMessagesNotVisible` son métricas aproximadas y pueden tardar en reflejar el estado real.
+
+### ¿Qué pasa si el procesamiento tarda más de 30 segundos?
+
+El mensaje puede volver a estar visible mientras todavía se procesa y otro consumidor podría recibirlo. Se debe aumentar el VisibilityTimeout o extenderlo con `ChangeMessageVisibility`.
+
+### ¿Qué permisos mínimos necesita el role?
+
+`sqs:GetQueueAttributes`, `sqs:SendMessage`, `sqs:ReceiveMessage` y `sqs:DeleteMessage`, limitados al ARN de la cola del laboratorio.
+
+### ¿Por qué no se deben usar Access Keys dentro del código?
+
+Porque son credenciales estáticas que pueden filtrarse. El Instance Profile entrega credenciales temporales a la EC2.
+
+### ¿Qué riesgo tiene ejecutar productor y consumidor en la misma EC2?
+
+La EC2 es un punto único de falla. Si se detiene, ambos procesos se detienen, aunque SQS pueda conservar mensajes pendientes.
+
+### ¿Qué ocurre si se elimina la cola mientras los procesos están activos?
+
+Las llamadas posteriores de productor y consumidor fallan porque la Queue URL deja de existir. Los mensajes almacenados en esa cola ya no pueden recuperarse.
+
+### ¿Qué se debe revisar primero ante un `AccessDenied`?
+
+La identidad devuelta por `aws sts get-caller-identity`, el role asociado a la EC2, la policy efectiva, el ARN exacto de la cola y la región utilizada.
+
+### ¿Por qué no basta con observar que el mensaje fue recibido?
+
+Porque recibirlo solo lo vuelve temporalmente invisible. La confirmación de trabajo exitoso es el procesamiento terminado seguido de `DeleteMessage`.
+
+### ¿Qué demuestra realmente este laboratorio y qué no demuestra?
+
+Demuestra desacoplamiento temporal, backlog, reintentos y uso de IAM Role con SQS. No demuestra alta disponibilidad, orden estricto ni aislamiento frente a una falla de EC2.
+
+---
+
 # 14. Problemas frecuentes y soluciones
 
 ## Problema: `AccessDenied`
