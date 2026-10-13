@@ -589,103 +589,46 @@ Repetir en su totalidad la secuencia del ciclo operacional para demostrar que el
 
 ---
 
-# 8. Comandos AWS CLI para verificación de evidencias
+# 8. Respuestas técnicas para la defensa
 
-## 8.1 Identidad del Instance Profile y cumplimiento IMDSv2
-
-```bash
-# Verificar que el CLI/SDK en la EC2 obtiene credenciales temporales del Role
-aws sts get-caller-identity
-
-# Verificar desde el cliente local que la EC2 requiere IMDSv2 (HttpTokens = required)
-aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=dcl-dev-ops-web" \
-  --query "Reservations[*].Instances[*].{InstanceId:InstanceId,State:State.Name,IAMRole:IamInstanceProfile.Arn,IMDSv2:MetadataOptions.HttpTokens}" \
-  --output table
-```
-
-## 8.2 Verificación de Security Group (Superficie Mínima)
-
-```bash
-aws ec2 describe-security-groups \
-  --group-names "dcl-dev-sg-lab3" \
-  --query "SecurityGroups[*].IpPermissions" \
-  --output json
-```
-
-*Debe retornar únicamente la regla para el puerto TCP 80.*
-
-## 8.3 Ingesta en CloudWatch Logs
-
-```bash
-aws logs describe-log-streams \
-  --log-group-name "/dcl/dev/ops" \
-  --output table
-
-aws logs get-log-events \
-  --log-group-name "/dcl/dev/ops" \
-  --log-stream-name "INSTANCE_ID_AQUI" \
-  --limit 10
-```
-
-## 8.4 Estado de la Alarma y Métricas
-
-```bash
-aws cloudwatch describe-alarms \
-  --alarm-names "dcl-dev-ops-alarm" \
-  --query "MetricAlarms[*].{AlarmName:AlarmName,StateValue:StateValue,StateUpdatedTimestamp:StateUpdatedTimestamp}" \
-  --output table
-```
-
-## 8.5 Verificación de ausencia de credenciales estáticas localmente
-
-```bash
-# Verificar que en el código Python de la EC2 no existan access keys ni secretos
-grep -RniE 'aws_access_key_id|aws_secret_access_key|AKIA' /opt/dcl/app.py
-```
-
----
-
-# 9. Respuestas técnicas para la defensa
-
-### 9.1 ¿Por qué se utiliza IAM Role / Instance Profile en lugar de Access Keys fijas?
+### 8.1 ¿Por qué se utiliza IAM Role / Instance Profile en lugar de Access Keys fijas?
 Las Access Keys fijas son credenciales de larga duración que presentan un alto riesgo de fuga en repositorios de código o logs. El Instance Profile entrega credenciales temporales rotativas emitidas por AWS STS directamente a la EC2 a través del IMDSv2, cumpliendo con las mejores prácticas de seguridad de AWS.
 
-### 9.2 ¿Por qué la EC2 no necesita permisos para crear el Log Group, Filtros de Métricas ni Alarmas?
+### 8.2 ¿Por qué la EC2 no necesita permisos para crear el Log Group, Filtros de Métricas ni Alarmas?
 El workload en la EC2 solo actúa como **productor de logs** (`PutLogEvents`, `CreateLogStream`). La creación de la infraestructura de monitoreo (Log Group, Metric Filters, Alarmas, Dashboards) es responsabilidad de la identidad de gestión/administración del estudiante, aplicando el principio de mínimo privilegio.
 
-### 9.3 ¿Qué diferencia existe entre `defaultValue=0` en el Metric Filter y `TreatMissingData=notBreaching` en la Alarma?
+### 8.3 ¿Qué diferencia existe entre `defaultValue=0` en el Metric Filter y `TreatMissingData=notBreaching` en la Alarma?
 - `defaultValue=0` asigna el valor cero a la métrica `ErrorCount` **únicamente cuando se ingieren registros de log que no contienen la palabra `ERROR`**. Si no hay ingesta de logs en absoluto, no se emite ningún valor.
 - `TreatMissingData=notBreaching` le indica a la CloudWatch Alarm cómo interpretar los lapsos donde **no existen datapoints de métrica**, tratándolos como si el sistema estuviera saludable (evitando que la alarma pase erróneamente a `INSUFFICIENT_DATA` o `ALARM`).
 
-### 9.4 ¿Por qué CloudWatch no es instantáneo y cómo se interpreta el desfase entre T0, T1, T2 y T3?
+### 8.4 ¿Por qué CloudWatch no es instantáneo y cómo se interpreta el desfase entre T0, T1, T2 y T3?
 CloudWatch es un sistema distribuido de recolección y agregación asíncrona. Existen latencias inherentes:
 1. Escritura en disco e ingesta por el agente de CloudWatch (**T0 → T1**).
 2. Procesamiento del filtro de métricas en la ingesta (**T1 → T2**).
 3. Evaluación periódica del motor de alarmas en ventanas de 60 segundos (**T2 → T3**).  
 El desfase es un comportamiento esperado en sistemas de monitoreo y no constituye un fallo.
 
-### 9.5 ¿Qué demuestra la prueba de reproducibilidad (Ciclo 2)?
+### 8.5 ¿Qué demuestra la prueba de reproducibilidad (Ciclo 2)?
 Demuestra que la cadena de observabilidad es determinista, robusta y no dependió de un estado inicial fortuito ni de un comportamiento aislado de la instancia.
 
-### 9.6 ¿Por qué no se incluyó el puerto SSH (22) en el Security Group?
+### 8.6 ¿Por qué no se incluyó el puerto SSH (22) en el Security Group?
 Para reducir la superficie de exposición a ataques. Todo el aprovisionamiento de la instancia se realiza mediante automation en User Data. No se requiere acceso por terminal interactiva SSH para la operación del laboratorio.
 
-### 9.7 ¿Qué función cumple IMDSv2 y por qué es obligatorio en esta práctica?
+### 8.7 ¿Qué función cumple IMDSv2 y por qué es obligatorio en esta práctica?
 IMDSv2 requiere el uso de sesiones orientadas a tokens de acceso local (`PUT` request preliminar) para consultar la metadata de la instancia, lo cual mitiga ataques de SSRF (Server-Side Request Forgery) que intenten extraer credenciales de IAM desde vulnerabilidades en la aplicación web.
 
-### 9.8 ¿Cómo se correlaciona la evidencia en una investigación real?
+### 8.8 ¿Cómo se correlaciona la evidencia en una investigación real?
 Se realiza una búsqueda causal inversa: se detecta la alarma (`ALARM`), se revisa la ventana de tiempo del incremento de la métrica (`ErrorCount`) y se profundiza en los registros de log del mismo intervalo de tiempo para identificar la ruta (`path`), código HTTP (`status`) y mensaje de error (`message`) causante.
 
-### 9.9 ¿Qué diferencia hay entre esta práctica de observabilidad y una arquitectura de Alta Disponibilidad (HA)?
+### 8.9 ¿Qué diferencia hay entre esta práctica de observabilidad y una arquitectura de Alta Disponibilidad (HA)?
 Esta práctica busca demostrar **visibilidad y respuesta basada en evidencia** ante fallos en una única instancia. Una arquitectura HA (con ALB, Auto Scaling Groups y múltiples zonas de disponibilidad) busca prevenir la interrupción del servicio distribuyendo la carga, pero no reemplaza la necesidad de observabilidad para entender el origen de los fallos.
 
-### 9.10 ¿Por qué la retención del Log Group se fijó en 7 días?
+### 8.10 ¿Por qué la retención del Log Group se fijó en 7 días?
 Para cumplir con políticas de gestión de almacenamiento y control de costos de ingestión y retención en CloudWatch Logs, evitando retenciones indefinidas que acumulen costos no deseados.
 
 ---
 
-# 10. Problemas frecuentes y soluciones (Troubleshooting)
+# 9. Problemas frecuentes y soluciones (Troubleshooting)
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
@@ -696,7 +639,7 @@ Para cumplir con políticas de gestión de almacenamiento y control de costos de
 
 ---
 
-# 11. Seguridad y costos
+# 10. Seguridad y costos
 
 ## Buenas prácticas de seguridad aplicadas
 
@@ -715,43 +658,7 @@ Este laboratorio opera dentro de la capa gratuita (Free Tier) de AWS siempre que
 
 ---
 
-# 12. Cleanup paso a paso obligatorio
-
-Para evitar costos continuos en la cuenta personal de AWS, seguir el orden estricto de eliminación de recursos:
-
-1. **Terminar la instancia EC2:**
-   ```bash
-   aws ec2 terminate-instances --instance-ids "INSTANCE_ID_AQUI"
-   aws ec2 wait instance-terminated --instance-ids "INSTANCE_ID_AQUI"
-   ```
-2. **Eliminar el Security Group:**
-   ```bash
-   aws ec2 delete-security-group --group-name "dcl-dev-sg-lab3"
-   ```
-3. **Eliminar la Alarma de CloudWatch:**
-   ```bash
-   aws cloudwatch delete-alarms --alarm-names "dcl-dev-ops-alarm"
-   ```
-4. **Eliminar el Dashboard:**
-   ```bash
-   aws cloudwatch delete-dashboards --dashboard-names "dcl-dev-ops-dashboard"
-   ```
-5. **Eliminar el Metric Filter:**
-   ```bash
-   aws logs delete-metric-filter --log-group-name "/dcl/dev/ops" --filter-name "dcl-dev-error-filter"
-   ```
-6. **Eliminar el Log Group:**
-   ```bash
-   aws logs delete-log-group --log-group-name "/dcl/dev/ops"
-   ```
-7. **Eliminar IAM Role e Instance Profile:**
-   - Eliminar la policy inline `WriteLabLogs`.
-   - Eliminar el Instance Profile `dcl-dev-profile-lab3-ops`.
-   - Eliminar el Role `dcl-dev-role-lab3-ops`.
-
----
-
-# 13. Conclusión técnica
+# 11. Conclusión técnica
 
 El **LAB 3** demuestra de manera práctica y estructurada la implementación de una **cadena operacional de observabilidad completa** en AWS. A través del uso de credenciales temporales vía **IAM Instance Profile** e **IMDSv2**, se garantiza un esquema de seguridad robusto sin exposición de credenciales estáticas.
 
