@@ -8,6 +8,7 @@ terraform {
   }
 }
 
+# Sin credenciales: se toman de variables de entorno AWS_*
 provider "aws" {
   region = var.region
 }
@@ -33,6 +34,7 @@ resource "aws_security_group" "reto" {
   vpc_id      = data.aws_subnet.base.vpc_id
 
   ingress {
+    description = "SSH solo desde mi IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -40,10 +42,15 @@ resource "aws_security_group" "reto" {
   }
 
   egress {
+    description = "Salida total"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.prefix}-sg"
   }
 }
 
@@ -52,11 +59,12 @@ resource "aws_sqs_queue" "reto" {
 }
 
 resource "aws_instance" "reto" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro"
-  subnet_id              = var.subnet_id
-  vpc_security_group_ids = [aws_security_group.reto.id]
-  iam_instance_profile   = var.instance_profile
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = "t3.micro"
+  subnet_id                   = var.subnet_id
+  vpc_security_group_ids      = [aws_security_group.reto.id]
+  iam_instance_profile        = var.instance_profile
+  associate_public_ip_address = true # la subnet NO asigna IP publica automaticamente
 
   tags = {
     Name = "${var.prefix}-ec2"

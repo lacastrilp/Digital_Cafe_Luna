@@ -20,5 +20,6 @@ variable "ssh_cidr" {
 
 variable "instance_profile" {
   type    = string
-  default = "LabInstanceProfile"
+  default = null
 }
+
